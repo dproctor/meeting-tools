@@ -77,7 +77,9 @@ def main(arguments):
 
     notes = []
     for e in c.events:
-        if e.begin.date() < args.start_date or e.begin.date() > args.end_date:
+        if e.begin.datetime.astimezone(tz.tzlocal()).date(
+        ) < args.start_date or e.begin.datetime.astimezone(
+                tz.tzlocal()).date() > args.end_date:
             continue
         p = _parse_event_description(e.description, e)
         n = {
