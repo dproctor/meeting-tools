@@ -51,6 +51,7 @@ def main(arguments):
 
     for meeting_id in os.listdir(args.notes_dir):
         meeting_dir = os.path.join(args.notes_dir, meeting_id)
+        printed_meeting_id = False
         for note in os.listdir(meeting_dir):
             if not re.search("^\d\d\d\d-\d\d-\d\d.txt$", note):
                 continue
@@ -92,8 +93,13 @@ def main(arguments):
 
                 if len(filtered) == 0:
                     continue
-                print(bcolors.HEADER + bcolors.UNDERLINE + note_filename +
-                      bcolors.ENDC)
+
+                if not printed_meeting_id:
+                    print("\n" + bcolors.HEADER + bcolors.UNDERLINE +
+                          meeting_id + bcolors.ENDC)
+                    printed_meeting_id = True
+                print(bcolors.HEADER + note + bcolors.ENDC)
+
                 i = 1
                 for p in filtered:
                     print(bcolors.WARNING + "{}.".format(i) + bcolors.ENDC)
