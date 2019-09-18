@@ -47,6 +47,11 @@ def main(arguments):
                         '--inverse_owner',
                         help="Only show todos not belonging to owner",
                         type=str)
+    parser.add_argument(
+        '-m',
+        '--meeting_id',
+        help="Regular expression on meeting id to filter todos",
+        type=str)
 
     args = parser.parse_args(arguments)
 
@@ -66,7 +71,10 @@ def main(arguments):
                     if line == '\n' or (active_todo
                                         and _line_contains_todo(line)):
                         if _paragraph_contains_todo(lines):
-                            paragraphs.append({"lines": lines})
+                            paragraphs.append({
+                                "lines": lines,
+                                "meeting_id": meeting_id
+                            })
                             active_todo = True
                         lines = []
                         if line != "\n":
@@ -79,7 +87,10 @@ def main(arguments):
 
                 # Maybe add the last paragraph
                 if lines and _paragraph_contains_todo(lines):
-                    paragraphs.append({"lines": lines})
+                    paragraphs.append({
+                        "lines": lines,
+                        "meeting_id": meeting_id
+                    })
 
                 filtered = []
                 # Filter TODOs
@@ -91,6 +102,11 @@ def main(arguments):
                     if args.inverse_owner is not None:
                         if args.inverse_owner in metadata["owners"]:
                             continue
+                    if args.meeting_id is not None:
+                        if not re.search(args.meeting_id,
+                                         paragraph["meeting_id"]):
+                            continue
+
                     filtered.append(paragraph)
 
                 if not filtered:
