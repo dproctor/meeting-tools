@@ -10,16 +10,18 @@ Script to download meeting calendar, and create note files for each meeting.
 """
 
 from __future__ import print_function
-import os
-import sys
+
 import argparse
-from ics import Calendar
-import requests
-from datetime import date, datetime
-from dateutil import tz
 import email.utils
+import os
 import re
+import sys
 import textwrap
+from datetime import date, datetime
+
+import requests
+from dateutil import tz
+from ics import Calendar
 
 EMAIL_PATTERN = r"([^@ :\"\'<>]+@[^@ :\"\'<>]+\.[^@ :\"\'<>]+)"
 
@@ -125,6 +127,8 @@ def _parse_event_description(s: str, e):
     lines = []
     for l in s.splitlines():
         for ll in l.split('<br>'):
+            if not ll.strip():
+                continue
             lines.append(ll)
 
     # Meeting ID
