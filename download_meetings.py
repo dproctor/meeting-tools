@@ -12,12 +12,12 @@ Script to download meeting calendar, and create note files for each meeting.
 from __future__ import print_function
 
 import argparse
-import email.utils
 import os
 import re
 import sys
 import textwrap
 from datetime import date, datetime
+from html.parser import HTMLParser
 
 import requests
 from dateutil import tz
@@ -38,6 +38,8 @@ NOTE_TEMPLATE = """{date}.txt
 :Meeting-Description:
 {description}
 
+:Agenda:
+
 :Notes:
 
 """
@@ -45,8 +47,30 @@ NOTE_TEMPLATE = """{date}.txt
 DATETIME_PRINT_PATTERN = "%Y-%m-%d:%H:%M:%S"
 
 
-def main(arguments):
+class EventDescriptionParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.reset()
+        self.fed = []
 
+    def handle_data(self, d):
+        for line in d.split("<br>"):
+            for line2 in line.split("\n"):
+                self.fed.append(line2)
+
+    def get_data(self):
+        return self.fed
+
+    def get_data_joined(self):
+        return ''.join(self.fed)
+
+    def reset(self):
+        super().reset()
+        self.fed = []
+
+
+def main(arguments):
+    """Main method"""
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -78,12 +102,15 @@ def main(arguments):
     c = Calendar(requests.get(args.ics_url).text)
 
     notes = []
+    parser = EventDescriptionParser()
     for e in c.events:
         if e.begin.datetime.astimezone(tz.tzlocal()).date(
         ) < args.start_date or e.begin.datetime.astimezone(
                 tz.tzlocal()).date() > args.end_date:
             continue
-        p = _parse_event_description(e.description, e)
+        parser.feed(e.description)
+        description = parser.get_data()
+        p = _parse_event_description(description, e)
         n = {
             "meeting_id":
             p["meeting_id"],
@@ -96,11 +123,12 @@ def main(arguments):
             e.end.datetime.astimezone(
                 tz.tzlocal()).strftime(DATETIME_PRINT_PATTERN),
             "description":
-            e.description,
+            parser.get_data_joined(),
             "emails":
             p["emails"]
         }
         notes.append(n)
+        parser.reset()
     for n in notes:
         note_dir = os.path.join(args.notes_dir, n["meeting_id"])
         if not os.path.isdir(note_dir):
@@ -123,18 +151,13 @@ def main(arguments):
                     description=textwrap.indent(n["description"], '  ')))
 
 
-def _parse_event_description(s: str, e):
-    lines = []
-    for l in s.splitlines():
-        for ll in l.split('<br>'):
-            if not ll.strip():
-                continue
-            lines.append(ll)
+def _parse_event_description(description: str, e):
+    lines = description
 
     # Meeting ID
     assert len(
         lines) > 0, "Meeting ({}, {}, '{}') is missing meeting id".format(
-            e.name, e.begin, e.description)
+            e.name, e.begin, description)
     meeting_id = lines[0]
 
     # Extract emails
