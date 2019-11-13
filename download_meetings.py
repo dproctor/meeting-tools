@@ -96,9 +96,21 @@ def main(arguments):
                         default=date.today(),
                         type=lambda d: datetime.strptime(d, '%Y-%m-%d').date(),
                         help="Date in the format yyyy-mm-dd")
+    parser.add_argument(
+        "-id",
+        dest="meeting_id",
+        help=
+        "Meeting id for manual entry creation. If -id is provided, then no calendar lookup is done."
+    )
 
     args = parser.parse_args(arguments)
 
+    if args.meeting_id:
+        assert args.start_date, "--start-date (-s) argument is used for filename"
+        _maybe_create_file(args.notes_dir, args.meeting_id, args.start_date,
+                           "MEETING_START_TIME", "MEETING_END_TIME", None,
+                           "MEETING_DESCRIPTION", args.author, args.email)
+        return
     c = Calendar(requests.get(args.ics_url).text)
 
     notes = []
@@ -130,25 +142,33 @@ def main(arguments):
         notes.append(n)
         parser.reset()
     for n in notes:
-        note_dir = os.path.join(args.notes_dir, n["meeting_id"])
-        if not os.path.isdir(note_dir):
-            os.mkdir(note_dir)
-        note_filename = os.path.join(note_dir, "{}.txt".format(n["date"]))
-        if os.path.exists(note_filename):
-            print("Ignoring existing file: {}".format(note_filename))
-            continue
-        print("Creating file: {}".format(note_filename))
-        with open(note_filename, "w") as f:
-            f.write(
-                NOTE_TEMPLATE.format(
-                    date=n["date"],
-                    author=args.author,
-                    email=args.email,
-                    time=datetime.now().strftime(DATETIME_PRINT_PATTERN),
-                    meeting_start=n["start"],
-                    meeting_end=n["end"],
-                    participants=n["emails"],
-                    description=textwrap.indent(n["description"], '  ')))
+        _maybe_create_file(args.note_dir, n["meeting_id"], n["date"],
+                           n["start"], n["end"], n["emails"], n["description"],
+                           args.author, args.email)
+
+
+def _maybe_create_file(note_dir: str, meeting_id: str, date: str,
+                       meeting_start: str, meeting_end: str, emails: str,
+                       description: str, author: str, email: str) -> None:
+    note_dir = os.path.join(note_dir, meeting_id)
+    if not os.path.isdir(note_dir):
+        os.mkdir(note_dir)
+    note_filename = os.path.join(note_dir, "{}.txt".format(date))
+    if os.path.exists(note_filename):
+        print("Ignoring existing file: {}".format(note_filename))
+        return
+    print("Creating file: {}".format(note_filename))
+    with open(note_filename, "w") as f:
+        f.write(
+            NOTE_TEMPLATE.format(
+                date=date,
+                author=author,
+                email=email,
+                time=datetime.now().strftime(DATETIME_PRINT_PATTERN),
+                meeting_start=meeting_start,
+                meeting_end=meeting_end,
+                participants=emails,
+                description=textwrap.indent(description, '  ')))
 
 
 def _parse_event_description(description: str, e):
