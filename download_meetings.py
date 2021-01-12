@@ -18,6 +18,7 @@ import sys
 import textwrap
 from datetime import date, datetime
 from html.parser import HTMLParser
+from typing import Dict
 
 import requests
 from dateutil import tz
@@ -46,6 +47,26 @@ NOTE_TEMPLATE = """{date}.txt
 
 DATETIME_PRINT_PATTERN = "%Y-%m-%d:%H:%M:%S"
 
+MEETING_NAME_TO_ID: Dict[str, str] = {
+    "Backlog Grooming": "change-research-eng-backlog-grooming",
+    "Devon / Pat": "change-research-pat-reilly",
+    "Devon : Alex Chen": "change-research-alex-chen",
+    "Devon : Alex": "change-research-alex-auritt",
+    "Devon : Anand": "change-research-anand-gupta",
+    "Devon : Chris": "change-research-chris-coke",
+    "Devon : Jane": "change-research-jane-loria",
+    "Devon : Jesus": "change-research-jesus-garcia",
+    "Devon : Joe": "change-research-joe-hale",
+    "Devon : Judah": "change-research-judah-newman",
+    "Devon : Lauren": "change-research-lauren-goldstein",
+    "Devon : Mike": "change-research-mike-greenfield",
+    "Devon : Nancy": "change-research-nancy-zdunkewicz",
+    "Devon : Nicole": "change-research-nicole-bare",
+    "Devon : Serena": "change-research-serena-roosevelt",
+    "Devon : Stephen": "change-research-stephen-clermont",
+    "Sprint Planning": "change-research-eng-sprint-planning",
+}
+
 
 class EventDescriptionParser(HTMLParser):
     def __init__(self):
@@ -62,7 +83,7 @@ class EventDescriptionParser(HTMLParser):
         return self.fed
 
     def get_data_joined(self):
-        return ''.join(self.fed)
+        return "".join(self.fed)
 
     def reset(self):
         super().reset()
@@ -72,84 +93,110 @@ class EventDescriptionParser(HTMLParser):
 def main(arguments):
     """Main method"""
     parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-n',
-                        '--notes_dir',
-                        help="Directory containing notes",
-                        type=str)
-    parser.add_argument('-c',
-                        '--ics_url',
-                        help="ics URL for meeting calendar",
-                        type=str)
-    parser.add_argument('-a', '--author', help="Author of notes", type=str)
-    parser.add_argument('-email', '--email', help="Author email", type=str)
-    parser.add_argument("-s",
-                        "--start-date",
-                        dest="start_date",
-                        default=date.today(),
-                        type=lambda d: datetime.strptime(d, '%Y-%m-%d').date(),
-                        help="Date in the format yyyy-mm-dd")
-    parser.add_argument("-e",
-                        "--end-date",
-                        dest="end_date",
-                        default=date.today(),
-                        type=lambda d: datetime.strptime(d, '%Y-%m-%d').date(),
-                        help="Date in the format yyyy-mm-dd")
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "-n", "--notes_dir", help="Directory containing notes", type=str
+    )
+    parser.add_argument(
+        "-c", "--ics_url", help="ics URL for meeting calendar", type=str
+    )
+    parser.add_argument("-a", "--author", help="Author of notes", type=str)
+    parser.add_argument("-email", "--email", help="Author email", type=str)
+    parser.add_argument(
+        "-s",
+        "--start-date",
+        dest="start_date",
+        default=date.today(),
+        type=lambda d: datetime.strptime(d, "%Y-%m-%d").date(),
+        help="Date in the format yyyy-mm-dd",
+    )
+    parser.add_argument(
+        "-e",
+        "--end-date",
+        dest="end_date",
+        default=date.today(),
+        type=lambda d: datetime.strptime(d, "%Y-%m-%d").date(),
+        help="Date in the format yyyy-mm-dd",
+    )
     parser.add_argument(
         "-id",
         dest="meeting_id",
-        help=
-        "Meeting id for manual entry creation. If -id is provided, then no calendar lookup is done."
+        help="Meeting id for manual entry creation. If -id is provided, then no calendar lookup is done.",
     )
 
     args = parser.parse_args(arguments)
 
     if args.meeting_id:
-        assert args.start_date, "--start-date (-s) argument is used for filename"
-        _maybe_create_file(args.notes_dir, args.meeting_id, args.start_date,
-                           "MEETING_START_TIME", "MEETING_END_TIME", None,
-                           "MEETING_DESCRIPTION", args.author, args.email)
+        _maybe_create_file(
+            args.notes_dir,
+            args.meeting_id,
+            args.start_date,
+            "MEETING_START_TIME",
+            "MEETING_END_TIME",
+            None,
+            "MEETING_DESCRIPTION",
+            args.author,
+            args.email,
+        )
         return
     c = Calendar(requests.get(args.ics_url).text)
 
     notes = []
     parser = EventDescriptionParser()
+    print(c.events)
     for e in c.events:
-        if e.begin.datetime.astimezone(tz.tzlocal()).date(
-        ) < args.start_date or e.begin.datetime.astimezone(
-                tz.tzlocal()).date() > args.end_date:
+        if (
+            e.begin.datetime.astimezone(tz.tzlocal()).date() < args.start_date
+            or e.begin.datetime.astimezone(tz.tzlocal()).date() > args.end_date
+        ):
+            continue
+        if e.name not in MEETING_NAME_TO_ID:
+            print("Ignoring {}".format(e.name))
             continue
         parser.feed(e.description)
         description = parser.get_data()
         p = _parse_event_description(description, e)
         n = {
-            "meeting_id":
-            p["meeting_id"],
-            "date":
-            e.begin.date(),
-            "start":
-            e.begin.datetime.astimezone(
-                tz.tzlocal()).strftime(DATETIME_PRINT_PATTERN),
-            "end":
-            e.end.datetime.astimezone(
-                tz.tzlocal()).strftime(DATETIME_PRINT_PATTERN),
-            "description":
-            parser.get_data_joined(),
-            "emails":
-            p["emails"]
+            # "meeting_id": p["meeting_id"],
+            "meeting_id": MEETING_NAME_TO_ID[e.name],
+            "date": e.begin.date(),
+            "start": e.begin.datetime.astimezone(tz.tzlocal()).strftime(
+                DATETIME_PRINT_PATTERN
+            ),
+            "end": e.end.datetime.astimezone(tz.tzlocal()).strftime(
+                DATETIME_PRINT_PATTERN
+            ),
+            "description": parser.get_data_joined(),
+            "emails": p["emails"],
         }
         notes.append(n)
         parser.reset()
     for n in notes:
-        _maybe_create_file(args.note_dir, n["meeting_id"], n["date"],
-                           n["start"], n["end"], n["emails"], n["description"],
-                           args.author, args.email)
+        _maybe_create_file(
+            args.notes_dir,
+            n["meeting_id"],
+            n["date"],
+            n["start"],
+            n["end"],
+            n["emails"],
+            n["description"],
+            args.author,
+            args.email,
+        )
 
 
-def _maybe_create_file(note_dir: str, meeting_id: str, date: str,
-                       meeting_start: str, meeting_end: str, emails: str,
-                       description: str, author: str, email: str) -> None:
+def _maybe_create_file(
+    note_dir: str,
+    meeting_id: str,
+    date: str,
+    meeting_start: str,
+    meeting_end: str,
+    emails: str,
+    description: str,
+    author: str,
+    email: str,
+) -> None:
     note_dir = os.path.join(note_dir, meeting_id)
     if not os.path.isdir(note_dir):
         os.mkdir(note_dir)
@@ -168,28 +215,33 @@ def _maybe_create_file(note_dir: str, meeting_id: str, date: str,
                 meeting_start=meeting_start,
                 meeting_end=meeting_end,
                 participants=emails,
-                description=textwrap.indent(description, '  ')))
+                description=textwrap.indent(description, "  "),
+            )
+        )
 
 
 def _parse_event_description(description: str, e):
     lines = description
 
     # Meeting ID
-    assert len(
-        lines) > 0, "Meeting ({}, {}, '{}') is missing meeting id".format(
-            e.name, e.begin, description)
+    if not lines:
+        return {"meeting_id": "", "emails": ""}
+    assert len(lines) > 0, "Meeting ({}, {}, '{}') is missing meeting id".format(
+        e.name, e.begin, description
+    )
     meeting_id = lines[0]
 
     # Extract emails
     emails = set()
     for l in lines:
         m = re.findall(EMAIL_PATTERN, l)
-        if m is None: continue
+        if m is None:
+            continue
         for a in m:
             emails.add(a)
     return {
         "meeting_id": meeting_id,
-        "emails": "\n".join([_print_participant(e) for e in emails])
+        "emails": "\n".join([_print_participant(e) for e in emails]),
     }
 
 
@@ -197,5 +249,5 @@ def _print_participant(p):
     return "  {email}".format(email=p)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
